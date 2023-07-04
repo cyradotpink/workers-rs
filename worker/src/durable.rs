@@ -209,6 +209,103 @@ pub struct Storage {
     inner: DurableObjectStorage,
 }
 
+/// cyradotpink/workers-rs/tree/write-coalescing
+/// Additional impl for calling Workers' underlying JS functions without doing anything
+/// with the returned promisses. Helpful for taking advantage of write coalescing, and the fact
+/// that unconfirmed writes are prevented anyway (by default)
+/// https://blog.cloudflare.com/durable-objects-easy-fast-correct-choose-three/
+impl Storage {
+    /// Stores the value and associates it with the given key.
+    pub fn put_coalesced<T: Serialize>(
+        &mut self,
+        key: &str,
+        value: T,
+    ) -> core::result::Result<js_sys::Promise, JsValue> {
+        self.inner.put(key, serde_wasm_bindgen::to_value(&value)?)
+    }
+
+    /// Takes a serializable struct and stores each of its keys and values to storage.
+    pub fn put_multiple_coalesced<T: Serialize>(
+        &mut self,
+        values: T,
+    ) -> core::result::Result<js_sys::Promise, JsValue> {
+        let values = serde_wasm_bindgen::to_value(&values)?;
+        if !values.is_object() {
+            return Err("Must pass in a struct type".to_string().into());
+        }
+        self.inner.put_multiple(values)
+    }
+
+    /// Deletes the key and associated value. Returns true if the key existed or false if it didn't.
+    pub fn delete_coalesced(
+        &mut self,
+        key: &str,
+    ) -> core::result::Result<js_sys::Promise, JsValue> {
+        self.inner.delete(key)
+    }
+
+    /// Deletes the provided keys and their associated values. Returns a count of the number of
+    /// key-value pairs deleted.
+    pub fn delete_multiple_coalesced(
+        &mut self,
+        keys: Vec<impl Deref<Target = str>>,
+    ) -> core::result::Result<js_sys::Promise, JsValue> {
+        self.inner.delete_multiple(
+            keys.into_iter()
+                .map(|key| JsValue::from(key.deref()))
+                .collect(),
+        )
+    }
+
+    /// Deletes all keys and associated values, effectively deallocating all storage used by the
+    /// Durable Object. In the event of a failure while the operation is still in flight, it may be
+    /// that only a subset of the data is properly deleted.
+    pub fn delete_all_coalesced(&mut self) -> core::result::Result<js_sys::Promise, JsValue> {
+        self.inner.delete_all()
+    }
+
+    /// Sets the current alarm time to the given datetime.
+    ///
+    /// If `set_alarm()` is called with a time equal to or before Date.now(), the alarm
+    /// will be scheduled for asynchronous execution in the immediate future. If the
+    /// alarm handler is currently executing in this case, it will not be canceled.
+    /// Alarms can be set to millisecond granularity and will usually execute within
+    /// a few milliseconds after the set time, but can be delayed by up to a minute
+    /// due to maintenance or failures while failover takes place.
+    pub fn set_alarm_coalesced(
+        &self,
+        scheduled_time: impl Into<ScheduledTime>,
+    ) -> core::result::Result<js_sys::Promise, JsValue> {
+        self.inner
+            .set_alarm(scheduled_time.into().schedule(), JsValue::NULL.into())
+    }
+
+    pub fn set_alarm_with_options_coalesced(
+        &self,
+        scheduled_time: impl Into<ScheduledTime>,
+        options: SetAlarmOptions,
+    ) -> core::result::Result<js_sys::Promise, JsValue> {
+        self.inner.set_alarm(
+            scheduled_time.into().schedule(),
+            serde_wasm_bindgen::to_value(&options)?.into(),
+        )
+    }
+
+    /// Deletes the alarm if one exists. Does not cancel the alarm handler if it is
+    /// currently executing.
+    pub fn delete_alarm_coalesced(&self) -> core::result::Result<js_sys::Promise, JsValue> {
+        self.inner.delete_alarm(JsValue::NULL.into())
+    }
+
+    pub fn delete_alarm_with_options_coalesced(
+        &self,
+        options: SetAlarmOptions,
+    ) -> core::result::Result<js_sys::Promise, JsValue> {
+        self.inner
+            .delete_alarm(serde_wasm_bindgen::to_value(&options)?.into())
+    }
+}
+
 impl Storage {
     /// Retrieves the value associated with the given key. The type of the returned value will be
     /// whatever was previously written for the key.
