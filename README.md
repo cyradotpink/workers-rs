@@ -1,3 +1,5 @@
+This fork of [workers-rs](https://github.com/cloudflare/workers-rs) adds support for write coalescing in durable object storage.
+
 ![workers-rs](.github/logo.png)
 [![crates.io](https://img.shields.io/crates/v/worker)](https://crates.io/crates/worker)
 [![docs.rs](https://img.shields.io/docsrs/worker)](https://docs.rs/worker)
